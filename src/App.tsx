@@ -2,11 +2,8 @@ import { useEffect, useState } from 'react'
 import { Header, type ConnectionState } from './components/Header'
 import { Splash } from './components/Splash'
 import { Tabs, type TabId } from './components/Tabs'
-import {
-  MemoryPanel,
-  RecallPanel,
-  RememberPanel,
-} from './components/panels'
+import { MemoryPanel, RememberPanel } from './components/panels'
+import { RecallPanel } from './components/Recall'
 
 export default function App() {
   const [booted, setBooted] = useState(false)
@@ -67,7 +64,7 @@ export default function App() {
             tabIndex={0}
             className="quack-focusable rounded-2xl"
           >
-            {tab === 'recall' && <RecallPanel />}
+            {tab === 'recall' && <RecallPanel project={project} />}
             {tab === 'remember' && <RememberPanel />}
             {tab === 'memory' && <MemoryPanel />}
           </section>

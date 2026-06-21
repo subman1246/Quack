@@ -1,4 +1,4 @@
-import { Brain, PenLine, Search, type LucideIcon } from 'lucide-react'
+import { Brain, PenLine, type LucideIcon } from 'lucide-react'
 
 interface PlaceholderProps {
   icon: LucideIcon
@@ -22,16 +22,6 @@ function Placeholder({ icon: Icon, title, body }: PlaceholderProps) {
 }
 
 /* Placeholder panels. These get filled in with real interactions later. */
-
-export function RecallPanel() {
-  return (
-    <Placeholder
-      icon={Search}
-      title="Recall"
-      body="Ask a question and Quack answers from what your codebase remembers, with confidence and cited episodes."
-    />
-  )
-}
 
 export function RememberPanel() {
   return (
