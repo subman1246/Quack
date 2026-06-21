@@ -2,15 +2,39 @@ import { useEffect, useState } from 'react'
 import { Header, type ConnectionState } from './components/Header'
 import { Splash } from './components/Splash'
 import { Tabs, type TabId } from './components/Tabs'
-import { MemoryPanel, RememberPanel } from './components/panels'
 import { RecallPanel } from './components/Recall'
+import { RememberPanel } from './components/Remember'
+import { MemoryPanel } from './components/Memory'
+import { health } from './lib/quack'
 
 export default function App() {
   const [booted, setBooted] = useState(false)
   const [project, setProject] = useState('quack-demo')
   const [tab, setTab] = useState<TabId>('recall')
-  // Neutral connection state for now. Wired to health() in a later pass.
-  const [connection] = useState<ConnectionState>('neutral')
+  const [connection, setConnection] = useState<ConnectionState>('neutral')
+
+  // Reset to checking when the project changes, adjusting state during render
+  // (React's endorsed pattern) rather than inside the effect.
+  const [prevProject, setPrevProject] = useState(project)
+  if (prevProject !== project) {
+    setPrevProject(project)
+    setConnection('neutral')
+  }
+
+  // Check the Quack connection on load and whenever the project changes.
+  useEffect(() => {
+    let active = true
+    health(project)
+      .then((res) => {
+        if (active) setConnection(res.status === 'ok' ? 'ok' : 'error')
+      })
+      .catch(() => {
+        if (active) setConnection('error')
+      })
+    return () => {
+      active = false
+    }
+  }, [project])
 
   // Lock scroll while the splash is up.
   useEffect(() => {
@@ -65,8 +89,8 @@ export default function App() {
             className="quack-focusable rounded-2xl"
           >
             {tab === 'recall' && <RecallPanel project={project} />}
-            {tab === 'remember' && <RememberPanel />}
-            {tab === 'memory' && <MemoryPanel />}
+            {tab === 'remember' && <RememberPanel project={project} />}
+            {tab === 'memory' && <MemoryPanel project={project} />}
           </section>
         </main>
 

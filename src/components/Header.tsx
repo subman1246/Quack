@@ -6,10 +6,25 @@ interface HeaderProps {
   connection: ConnectionState
 }
 
-const DOT: Record<ConnectionState, { color: string; label: string }> = {
-  neutral: { color: 'rgba(255,255,255,0.25)', label: 'Connection idle' },
-  ok: { color: 'var(--color-decision)', label: 'Connected' },
-  error: { color: 'var(--color-bug)', label: 'Connection error' },
+const DOT: Record<
+  ConnectionState,
+  { color: string; label: string; title: string }
+> = {
+  neutral: {
+    color: 'rgba(255,255,255,0.25)',
+    label: 'Checking memory',
+    title: 'Checking the Quack connection',
+  },
+  ok: {
+    color: '#46c98b',
+    label: 'Memory online',
+    title: 'Quack is connected and remembering',
+  },
+  error: {
+    color: 'var(--color-amber)',
+    label: 'Memory offline',
+    title: 'Quack cannot reach memory right now',
+  },
 }
 
 /** Top header: duck mark, wordmark, tagline, and connection indicator. */
@@ -38,17 +53,17 @@ export function Header({ connection }: HeaderProps) {
 
       <div
         className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-3 py-1.5"
-        title={dot.label}
+        title={dot.title}
       >
         <span
           aria-hidden="true"
-          className="h-2 w-2 rounded-full"
+          className={`h-2 w-2 rounded-full ${
+            connection === 'neutral' ? 'quack-dot' : ''
+          }`}
           style={{
             backgroundColor: dot.color,
             boxShadow:
-              connection === 'neutral'
-                ? 'none'
-                : `0 0 8px ${dot.color}`,
+              connection === 'neutral' ? 'none' : `0 0 8px ${dot.color}`,
           }}
         />
         <span className="font-mono text-[11px] text-ink-muted">
