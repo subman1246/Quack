@@ -18,7 +18,8 @@ export interface Episode {
 }
 
 export interface Citation {
-  type: EpisodeType
+  /** Real Parcle bridge returns 'session', 'file', or episode types. */
+  type: string
   id: string
 }
 

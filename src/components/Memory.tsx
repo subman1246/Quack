@@ -1,12 +1,18 @@
-import { useMemo, useState } from 'react'
-import { Search } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Check, Pencil, Search, Trash2, X } from 'lucide-react'
 import type { Episode, EpisodeType } from '../lib/quack'
 import { EPISODE_META, EPISODE_TYPES } from '../lib/episode-meta'
-import { useStoredEpisodes } from '../lib/episode-store'
+import {
+  useStoredEpisodes,
+  seedIfEmpty,
+  updateEpisode,
+  deleteEpisode,
+} from '../lib/episode-store'
 
 /* ---------------------------------------------------------------------------
-   Memory tab. A searchable, filterable feed of episode cards. Combines user
-   logged episodes from the store with a set of seed cards so it is never empty.
+   Memory tab. A searchable, filterable feed of episode cards. On first load
+   the seed episodes are written to localStorage so edits and deletes persist
+   across reloads. Clicking a card opens a detail view with an Edit mode.
 --------------------------------------------------------------------------- */
 
 function daysAgo(days: number): string {
@@ -88,12 +94,265 @@ function Chip({ children }: { children: React.ReactNode }) {
   )
 }
 
-function EpisodeCard({ episode }: { episode: Episode }) {
+/* -------------------------- Episode detail modal ------------------------- */
+
+function EpisodeDetailModal({
+  episode,
+  project,
+  onClose,
+}: {
+  episode: Episode
+  project: string
+  onClose: () => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<Episode>(episode)
+  const [filesRaw, setFilesRaw] = useState(episode.files.join(', '))
+  const [packagesRaw, setPackagesRaw] = useState(episode.packages.join(', '))
+
+  const handleClose = useCallback(() => onClose(), [onClose])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') handleClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleClose])
+
+  const meta = EPISODE_META[draft.type] ?? EPISODE_META.bug
+  const Icon = meta.icon
+
+  function startEdit() {
+    setDraft(episode)
+    setFilesRaw(episode.files.join(', '))
+    setPackagesRaw(episode.packages.join(', '))
+    setEditing(true)
+  }
+
+  function save() {
+    const updated: Episode = {
+      ...draft,
+      files: filesRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      packages: packagesRaw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }
+    updateEpisode(project, episode.createdAt, updated)
+    onClose()
+  }
+
+  function handleDelete() {
+    deleteEpisode(project, episode.createdAt)
+    onClose()
+  }
+
+  return (
+    <div
+      className="quack-fade fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-12 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Episode detail"
+      onClick={handleClose}
+    >
+      <div
+        className="quack-card quack-rise w-full max-w-lg rounded-2xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span
+              className="flex h-8 w-8 flex-none items-center justify-center rounded-lg"
+              style={{ backgroundColor: meta.tintBg, color: meta.color }}
+            >
+              <Icon size={16} aria-hidden="true" />
+            </span>
+            <span
+              className="text-[11px] font-medium uppercase tracking-wider"
+              style={{ color: meta.color }}
+            >
+              {meta.label}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            {!editing && (
+              <button
+                type="button"
+                onClick={startEdit}
+                aria-label="Edit episode"
+                className="quack-press quack-focusable rounded-lg p-1.5 text-ink-muted hover:text-ink"
+              >
+                <Pencil size={15} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleClose}
+              aria-label="Close"
+              className="quack-press quack-focusable rounded-lg p-1.5 text-ink-muted hover:text-ink"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        </div>
+
+        {/* View mode */}
+        {!editing && (
+          <div className="mt-4">
+            <h2 className="text-base font-semibold text-ink">{episode.title}</h2>
+            {episode.details && (
+              <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+                {episode.details}
+              </p>
+            )}
+            {(episode.files.length > 0 || episode.packages.length > 0) && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {episode.files.map((f) => (
+                  <Chip key={`f-${f}`}>{f}</Chip>
+                ))}
+                {episode.packages.map((p) => (
+                  <Chip key={`p-${p}`}>{p}</Chip>
+                ))}
+              </div>
+            )}
+            <time
+              className="mt-3 block font-mono text-[11px] text-ink-muted"
+              dateTime={episode.createdAt}
+            >
+              {relativeTime(episode.createdAt)}
+            </time>
+          </div>
+        )}
+
+        {/* Edit mode */}
+        {editing && (
+          <div className="mt-4 flex flex-col gap-3">
+            <div>
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                Type
+              </label>
+              <select
+                value={draft.type}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, type: e.target.value as EpisodeType }))
+                }
+                className="quack-focusable w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink"
+              >
+                {EPISODE_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {EPISODE_META[t].label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                Title
+              </label>
+              <input
+                type="text"
+                value={draft.title}
+                onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                className="quack-focusable w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                Details
+              </label>
+              <textarea
+                value={draft.details}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, details: e.target.value }))
+                }
+                rows={4}
+                className="quack-focusable w-full resize-y rounded-lg border border-hairline bg-surface px-3 py-2 text-sm leading-relaxed text-ink"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                Files
+              </label>
+              <input
+                type="text"
+                value={filesRaw}
+                onChange={(e) => setFilesRaw(e.target.value)}
+                placeholder="src/foo.ts, src/bar.ts"
+                className="quack-focusable w-full rounded-lg border border-hairline bg-surface px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+                Packages
+              </label>
+              <input
+                type="text"
+                value={packagesRaw}
+                onChange={(e) => setPackagesRaw(e.target.value)}
+                placeholder="react, lodash"
+                className="quack-focusable w-full rounded-lg border border-hairline bg-surface px-3 py-2 font-mono text-sm text-ink placeholder:text-ink-muted"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="mt-5 flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="quack-press quack-focusable flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm text-[var(--color-bug)] hover:bg-[rgba(242,97,91,0.1)]"
+          >
+            <Trash2 size={14} aria-hidden="true" />
+            Delete
+          </button>
+          {editing && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="quack-press quack-focusable rounded-lg border border-hairline px-3 py-2 text-sm text-ink-soft hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={!draft.title.trim()}
+                className="quack-press quack-focusable flex items-center gap-1.5 rounded-lg bg-amber px-4 py-2 text-sm font-semibold text-base disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Check size={14} aria-hidden="true" />
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------------- Episode card ----------------------------- */
+
+function EpisodeCard({
+  episode,
+  onClick,
+}: {
+  episode: Episode
+  onClick: () => void
+}) {
   const meta = EPISODE_META[episode.type]
   const Icon = meta.icon
   return (
-    <article
-      className="quack-rise rounded-xl border bg-surface p-4"
+    <button
+      type="button"
+      onClick={onClick}
+      className="quack-rise quack-press quack-focusable w-full rounded-xl border bg-surface p-4 text-left"
       style={{ borderColor: meta.tintBorder }}
     >
       <div className="flex items-start gap-3">
@@ -138,9 +397,11 @@ function EpisodeCard({ episode }: { episode: Episode }) {
           )}
         </div>
       </div>
-    </article>
+    </button>
   )
 }
+
+/* ------------------------------ Memory panel ---------------------------- */
 
 type FilterId = 'all' | EpisodeType
 
@@ -153,14 +414,21 @@ export function MemoryPanel({ project }: { project: string }) {
   const stored = useStoredEpisodes(project)
   const [filter, setFilter] = useState<FilterId>('all')
   const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState<Episode | null>(null)
+
+  // On first load per project, write seed episodes into localStorage so they
+  // are persistent and editable like any other episode.
+  useEffect(() => {
+    seedIfEmpty(project, SEED_EPISODES)
+  }, [project])
 
   const all = useMemo(() => {
-    const combined = [...stored, ...SEED_EPISODES]
-    combined.sort(
+    const copy = [...stored]
+    copy.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
-    return combined
+    return copy
   }, [stored])
 
   const visible = useMemo(() => {
@@ -168,12 +436,7 @@ export function MemoryPanel({ project }: { project: string }) {
     return all.filter((ep) => {
       if (filter !== 'all' && ep.type !== filter) return false
       if (!q) return true
-      const hay = [
-        ep.title,
-        ep.details,
-        ep.files.join(' '),
-        ep.packages.join(' '),
-      ]
+      const hay = [ep.title, ep.details, ep.files.join(' '), ep.packages.join(' ')]
         .join(' ')
         .toLowerCase()
       return hay.includes(q)
@@ -236,11 +499,23 @@ export function MemoryPanel({ project }: { project: string }) {
         ) : (
           <div className="flex flex-col gap-2.5">
             {visible.map((ep, i) => (
-              <EpisodeCard key={`${ep.createdAt}-${ep.title}-${i}`} episode={ep} />
+              <EpisodeCard
+                key={`${ep.createdAt}-${ep.title}-${i}`}
+                episode={ep}
+                onClick={() => setSelected(ep)}
+              />
             ))}
           </div>
         )}
       </div>
+
+      {selected && (
+        <EpisodeDetailModal
+          episode={selected}
+          project={project}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   )
 }

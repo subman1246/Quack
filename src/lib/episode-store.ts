@@ -53,6 +53,46 @@ export function addEpisode(project: string, episode: Episode) {
 }
 
 /**
+ * Write seed episodes to the store only if the project has no stored episodes
+ * yet. Safe to call on every mount -- it is a no-op after the first load.
+ */
+export function seedIfEmpty(project: string, seeds: Episode[]) {
+  if (read(project).length === 0) {
+    write(project, seeds)
+    emit()
+  }
+}
+
+/**
+ * Replace the episode whose createdAt matches. The first match wins.
+ * Notifies subscribers after writing.
+ */
+export function updateEpisode(
+  project: string,
+  createdAt: string,
+  updated: Episode,
+) {
+  const episodes = read(project)
+  const next = episodes.map((ep) =>
+    ep.createdAt === createdAt ? updated : ep,
+  )
+  write(project, next)
+  emit()
+}
+
+/**
+ * Remove the episode whose createdAt matches. Notifies subscribers.
+ */
+export function deleteEpisode(project: string, createdAt: string) {
+  const episodes = read(project)
+  write(
+    project,
+    episodes.filter((ep) => ep.createdAt !== createdAt),
+  )
+  emit()
+}
+
+/**
  * Subscribe to a project's stored episodes, newest first. Reloads whenever the
  * project changes or another part of the app adds an episode.
  */

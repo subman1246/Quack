@@ -3,13 +3,16 @@ import {
   Check,
   ChevronDown,
   Copy,
+  FileText,
+  HelpCircle,
   Keyboard,
+  MessageSquare,
   Search,
   Sparkles,
   X,
+  type LucideIcon,
 } from 'lucide-react'
 import { recall, type Citation, type RecallResult } from '../lib/quack'
-import { EPISODE_META } from '../lib/episode-meta'
 
 /* ---------------------------------------------------------------------------
    Recall tab. Ask Quack a question, watch the confidence gauge fill, and copy
@@ -189,6 +192,50 @@ function ConfidenceGauge({ value }: { value: number }) {
 
 /* ------------------------------ Citations ------------------------------ */
 
+interface SourceMeta {
+  label: string
+  icon: LucideIcon
+  color: string
+  tintBg: string
+  tintBorder: string
+}
+
+const NEUTRAL_SOURCE: SourceMeta = {
+  label: 'Source',
+  icon: HelpCircle,
+  color: 'var(--color-ink-soft)',
+  tintBg: 'rgba(255,255,255,0.06)',
+  tintBorder: 'rgba(255,255,255,0.12)',
+}
+
+const SOURCE_META: Record<string, SourceMeta> = {
+  session: {
+    label: 'Session',
+    icon: MessageSquare,
+    color: 'var(--color-ink-soft)',
+    tintBg: 'rgba(255,255,255,0.06)',
+    tintBorder: 'rgba(255,255,255,0.12)',
+  },
+  file: {
+    label: 'File',
+    icon: FileText,
+    color: 'var(--color-ink-soft)',
+    tintBg: 'rgba(255,255,255,0.06)',
+    tintBorder: 'rgba(255,255,255,0.12)',
+  },
+}
+
+function getSourceMeta(type: string | undefined): SourceMeta {
+  if (!type) return NEUTRAL_SOURCE
+  const known = SOURCE_META[type]
+  if (known) return known
+  // Unknown type: show type name capitalized, neutral styling
+  return {
+    ...NEUTRAL_SOURCE,
+    label: type.charAt(0).toUpperCase() + type.slice(1),
+  }
+}
+
 function CitationCard({
   citation,
   onCopy,
@@ -196,7 +243,7 @@ function CitationCard({
   citation: Citation
   onCopy: (id: string) => void
 }) {
-  const meta = EPISODE_META[citation.type]
+  const meta = getSourceMeta(citation.type)
   const Icon = meta.icon
   return (
     <button
