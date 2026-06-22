@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Check,
-  ChevronDown,
-  Copy,
-  Keyboard,
-  Search,
-  Sparkles,
-  X,
-} from 'lucide-react'
+import { Check, ChevronDown, Keyboard, Search, X } from 'lucide-react'
 import { recall, type Episode, type RecallResult } from '../lib/quack'
-import { ConfidenceGauge, CitationCard, gradeOf } from './RecallShared'
+import { gradeOf, RecallResultView } from './RecallShared'
 import { FileHistoryPanel } from './FileHistoryPanel'
 import { EpisodeDetailModal } from './Memory'
 
@@ -216,7 +208,6 @@ export function RecallPanel({ project }: { project: string }) {
   const [recent, setRecent] = useState<RecentEntry[]>(() => loadRecent(project))
   const [recentOpen, setRecentOpen] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
-  const [answerCopied, setAnswerCopied] = useState(false)
 
   // File History panel state -- null means closed.
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -254,7 +245,6 @@ export function RecallPanel({ project }: { project: string }) {
       if (!q || loading) return
       setLoading(true)
       setResult(null)
-      setAnswerCopied(false)
       try {
         const res = await recall(project, q)
         setResult(res)
@@ -314,15 +304,6 @@ export function RecallPanel({ project }: { project: string }) {
       runRecall(query)
     }
   }
-
-  const copyAnswer = useCallback(async () => {
-    if (!result) return
-    const ok = await copyText(result.answer, 'Answer copied')
-    if (ok) {
-      setAnswerCopied(true)
-      window.setTimeout(() => setAnswerCopied(false), 1600)
-    }
-  }, [result, copyText])
 
   const showEmpty = !loading && !result
 
@@ -412,67 +393,16 @@ export function RecallPanel({ project }: { project: string }) {
         </div>
       )}
 
-      {/* Result */}
+      {/* Result -- file-type citation chips open File History instead of copying */}
       {!loading && result && (
         <div className="mt-7">
-          <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-start">
-            <div className="quack-rise min-w-0">
-              <div className="flex items-center gap-1.5 text-amber">
-                <Sparkles size={13} aria-hidden="true" />
-                <span className="font-mono text-[11px] uppercase tracking-wider">
-                  Quack remembers
-                </span>
-              </div>
-              <div className="mt-2 flex items-start gap-2">
-                <p className="flex-1 text-sm leading-relaxed text-ink-soft">
-                  {result.answer}
-                </p>
-                <button
-                  type="button"
-                  onClick={copyAnswer}
-                  aria-label="Copy answer"
-                  title="Copy answer"
-                  className="quack-press quack-focusable flex-none rounded-lg border border-hairline bg-surface p-1.5 text-ink-muted hover:text-ink"
-                >
-                  {answerCopied ? (
-                    <Check size={14} className="text-[#46c98b]" />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div
-              className="quack-rise flex justify-center sm:justify-end"
-              style={{ animationDelay: '0.08s' }}
-            >
-              <ConfidenceGauge value={result.confidence} />
-            </div>
-          </div>
-
-          {/* Citations -- file-type chips open File History instead of copying */}
-          {result.citations.length > 0 && (
-            <div className="quack-rise mt-6" style={{ animationDelay: '0.12s' }}>
-              <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted">
-                Cited episodes
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {result.citations.map((c) => (
-                  <CitationCard
-                    key={c.id}
-                    citation={c}
-                    onCopy={(id) => copyText(id, `Copied ${id}`)}
-                    onOpen={
-                      c.type === 'file'
-                        ? () => setSelectedFile(c.id)
-                        : undefined
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          <RecallResultView
+            result={result}
+            layout="split"
+            onCopyAnswer={(text) => copyText(text, 'Answer copied')}
+            onCopyCitation={(id) => copyText(id, `Copied ${id}`)}
+            onOpenFile={(path) => setSelectedFile(path)}
+          />
         </div>
       )}
 

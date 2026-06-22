@@ -1,7 +1,12 @@
-import { Brain, Search, type LucideIcon } from 'lucide-react'
-import { PenLine } from 'lucide-react'
+import {
+  ArrowUpCircle,
+  Brain,
+  PenLine,
+  Search,
+  type LucideIcon,
+} from 'lucide-react'
 
-export type TabId = 'recall' | 'remember' | 'memory'
+export type TabId = 'recall' | 'remember' | 'memory' | 'upgrade'
 
 interface TabDef {
   id: TabId
@@ -13,6 +18,7 @@ const TABS: TabDef[] = [
   { id: 'recall', label: 'Recall', icon: Search },
   { id: 'remember', label: 'Remember', icon: PenLine },
   { id: 'memory', label: 'Memory', icon: Brain },
+  { id: 'upgrade', label: 'Upgrade', icon: ArrowUpCircle },
 ]
 
 interface TabsProps {

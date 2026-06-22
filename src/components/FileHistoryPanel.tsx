@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Check, Copy, Sparkles, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { recall, type Episode, type RecallResult } from '../lib/quack'
 import { useStoredEpisodes } from '../lib/episode-store'
 import { EPISODE_META } from '../lib/episode-meta'
-import { ConfidenceGauge, CitationCard } from './RecallShared'
+import { RecallResultView } from './RecallShared'
 
 /* ---------------------------------------------------------------------------
    File History slide-over. Opens when a file chip is clicked anywhere in the
@@ -43,7 +43,6 @@ export function FileHistoryPanel({
   const [result, setResult] = useState<RecallResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
-  const [answerCopied, setAnswerCopied] = useState(false)
 
   const allEpisodes = useStoredEpisodes(project)
   const touching = allEpisodes
@@ -85,17 +84,6 @@ export function FileHistoryPanel({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
-
-  const copyAnswer = useCallback(async () => {
-    if (!result) return
-    try {
-      await navigator.clipboard.writeText(result.answer)
-      setAnswerCopied(true)
-      window.setTimeout(() => setAnswerCopied(false), 1600)
-    } catch {
-      // Clipboard unavailable -- silently skip.
-    }
-  }, [result])
 
   return (
     <>
@@ -168,68 +156,26 @@ export function FileHistoryPanel({
           )}
 
           {!loading && result && (
-            <div className="quack-rise">
-              {/* Answer */}
-              <div className="flex items-center gap-1.5 text-amber">
-                <Sparkles size={13} aria-hidden="true" />
-                <span className="font-mono text-[11px] uppercase tracking-wider">
-                  Quack remembers
-                </span>
-              </div>
-              <div className="mt-2 flex items-start gap-2">
-                <p className="flex-1 text-sm leading-relaxed text-ink-soft">
-                  {result.answer}
-                </p>
-                <button
-                  type="button"
-                  onClick={copyAnswer}
-                  aria-label="Copy answer"
-                  title="Copy answer"
-                  className="quack-press quack-focusable flex-none rounded-lg border border-hairline bg-surface-high p-1.5 text-ink-muted hover:text-ink"
-                >
-                  {answerCopied ? (
-                    <Check size={14} className="text-[#46c98b]" />
-                  ) : (
-                    <Copy size={14} />
-                  )}
-                </button>
-              </div>
-
-              {/* Confidence gauge */}
-              <div
-                className="quack-rise mt-5 flex justify-center"
-                style={{ animationDelay: '0.08s' }}
-              >
-                <ConfidenceGauge value={result.confidence} />
-              </div>
-
-              {/* Citations */}
-              {result.citations.length > 0 && (
-                <div
-                  className="quack-rise mt-5"
-                  style={{ animationDelay: '0.12s' }}
-                >
-                  <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted">
-                    Cited episodes
-                  </p>
-                  <div className="grid gap-2">
-                    {result.citations.map((c) => (
-                      <CitationCard
-                        key={c.id}
-                        citation={c}
-                        onCopy={async (id) => {
-                          try {
-                            await navigator.clipboard.writeText(id)
-                          } catch {
-                            // Clipboard unavailable.
-                          }
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+            <RecallResultView
+              result={result}
+              layout="stacked"
+              citationGrid="single"
+              onCopyAnswer={async (text) => {
+                try {
+                  await navigator.clipboard.writeText(text)
+                  return true
+                } catch {
+                  return false
+                }
+              }}
+              onCopyCitation={async (id) => {
+                try {
+                  await navigator.clipboard.writeText(id)
+                } catch {
+                  // Clipboard unavailable.
+                }
+              }}
+            />
           )}
         </div>
 

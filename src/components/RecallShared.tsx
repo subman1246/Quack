@@ -1,13 +1,18 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useId, useLayoutEffect, useRef, useState } from 'react'
 import {
+  Check,
+  CloudOff,
   Copy,
+  Eye,
+  EyeOff,
   FileText,
   History,
   HelpCircle,
   MessageSquare,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
-import type { Citation } from '../lib/quack'
+import type { Citation, RecallResult } from '../lib/quack'
 
 /* ---------------------------------------------------------------------------
    Shared recall-result primitives used by both RecallPanel and
@@ -211,5 +216,194 @@ export function CitationCard({
         />
       )}
     </button>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/*  Recall result view                                                  */
+/*                                                                      */
+/*  Shared answer reveal + confidence gauge + citation chips, used by   */
+/*  Recall, File History, and Upgrade so they all behave the same way.  */
+/*  Below a confidence of 0.4 the answer is not presented as fact: a    */
+/*  calm note is shown with a toggle that reveals the weak answer and    */
+/*  its citations only when the user asks for them. At or above 0.4 the  */
+/*  result renders exactly as before.                                    */
+/* ------------------------------------------------------------------ */
+
+/** Confidence floor below which an answer is treated as a faint memory. */
+export const LOW_CONFIDENCE = 0.4
+
+export function RecallResultView({
+  result,
+  layout = 'split',
+  citationGrid = 'wide',
+  onCopyAnswer,
+  onCopyCitation,
+  onOpenFile,
+}: {
+  result: RecallResult
+  /** 'split' places the gauge beside the answer; 'stacked' below it. */
+  layout?: 'split' | 'stacked'
+  /** 'wide' uses a responsive multi-column citation grid; 'single' a column. */
+  citationGrid?: 'wide' | 'single'
+  /** Copy the answer text. Resolves true on success so the check icon shows. */
+  onCopyAnswer: (text: string) => Promise<boolean>
+  /** Copy a citation id. */
+  onCopyCitation: (id: string) => void
+  /** When provided, file-type citations open file history instead of copying. */
+  onOpenFile?: (path: string) => void
+}) {
+  const [answerCopied, setAnswerCopied] = useState(false)
+  const [showWeak, setShowWeak] = useState(false)
+  const weakRegionId = useId()
+
+  // Reset transient state when a new result arrives (state-during-render).
+  const [prevResult, setPrevResult] = useState(result)
+  if (prevResult !== result) {
+    setPrevResult(result)
+    setAnswerCopied(false)
+    setShowWeak(false)
+  }
+
+  const lowConfidence = result.confidence < LOW_CONFIDENCE
+  const reveal = !lowConfidence || showWeak
+
+  async function copyAnswer() {
+    const ok = await onCopyAnswer(result.answer)
+    if (ok) {
+      setAnswerCopied(true)
+      window.setTimeout(() => setAnswerCopied(false), 1600)
+    }
+  }
+
+  const copyButton = (
+    <button
+      type="button"
+      onClick={copyAnswer}
+      aria-label="Copy answer"
+      title="Copy answer"
+      className="quack-press quack-focusable flex-none rounded-lg border border-hairline bg-surface-high p-1.5 text-ink-muted hover:text-ink"
+    >
+      {answerCopied ? (
+        <Check size={14} className="text-[#46c98b]" />
+      ) : (
+        <Copy size={14} />
+      )}
+    </button>
+  )
+
+  const answerBody = (
+    <div className="mt-2 flex items-start gap-2">
+      <p className="flex-1 text-sm leading-relaxed text-ink-soft">
+        {result.answer}
+      </p>
+      {copyButton}
+    </div>
+  )
+
+  const answerBlock = (
+    <div className="quack-rise min-w-0">
+      {lowConfidence ? (
+        <>
+          <div className="flex items-center gap-1.5 text-ink-muted">
+            <CloudOff size={13} aria-hidden="true" />
+            <span className="font-mono text-[11px] uppercase tracking-wider">
+              Faint memory
+            </span>
+          </div>
+          <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+            Quack does not have a strong memory of this yet.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowWeak((v) => !v)}
+            aria-expanded={showWeak}
+            aria-controls={weakRegionId}
+            className="quack-press quack-focusable mt-3 inline-flex items-center gap-1.5 rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs text-ink-soft hover:text-ink"
+          >
+            {showWeak ? (
+              <EyeOff size={13} aria-hidden="true" />
+            ) : (
+              <Eye size={13} aria-hidden="true" />
+            )}
+            {showWeak ? 'Hide what I found' : 'Show what I found anyway'}
+          </button>
+          {showWeak && (
+            <div id={weakRegionId} className="quack-fade">
+              {answerBody}
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="flex items-center gap-1.5 text-amber">
+            <Sparkles size={13} aria-hidden="true" />
+            <span className="font-mono text-[11px] uppercase tracking-wider">
+              Quack remembers
+            </span>
+          </div>
+          {answerBody}
+        </>
+      )}
+    </div>
+  )
+
+  const showCitations = reveal && result.citations.length > 0
+  const citationsBlock = (
+    <div className="quack-rise mt-6" style={{ animationDelay: '0.12s' }}>
+      <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted">
+        Cited episodes
+      </p>
+      <div
+        className={
+          citationGrid === 'wide'
+            ? 'grid gap-2 sm:grid-cols-2 lg:grid-cols-3'
+            : 'grid gap-2'
+        }
+      >
+        {result.citations.map((c) => (
+          <CitationCard
+            key={c.id}
+            citation={c}
+            onCopy={(id) => onCopyCitation(id)}
+            onOpen={
+              onOpenFile && c.type === 'file'
+                ? () => onOpenFile(c.id)
+                : undefined
+            }
+          />
+        ))}
+      </div>
+    </div>
+  )
+
+  if (layout === 'stacked') {
+    return (
+      <div>
+        {answerBlock}
+        <div
+          className="quack-rise mt-5 flex justify-center"
+          style={{ animationDelay: '0.08s' }}
+        >
+          <ConfidenceGauge value={result.confidence} />
+        </div>
+        {showCitations && citationsBlock}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div className="grid gap-6 sm:grid-cols-[1fr_auto] sm:items-start">
+        {answerBlock}
+        <div
+          className="quack-rise flex justify-center sm:justify-end"
+          style={{ animationDelay: '0.08s' }}
+        >
+          <ConfidenceGauge value={result.confidence} />
+        </div>
+      </div>
+      {showCitations && citationsBlock}
+    </div>
   )
 }

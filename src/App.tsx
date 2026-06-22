@@ -7,6 +7,7 @@ import type { TabId } from './components/Tabs'
 import { RecallPanel } from './components/Recall'
 import { RememberPanel } from './components/Remember'
 import { MemoryPanel } from './components/Memory'
+import { UpgradePanel } from './components/Upgrade'
 import { SettingsPanel } from './components/Settings'
 import { health } from './lib/quack'
 import {
@@ -147,6 +148,7 @@ export default function App() {
             {tab === 'recall' && <RecallPanel project={project} />}
             {tab === 'remember' && <RememberPanel project={project} />}
             {tab === 'memory' && <MemoryPanel project={project} />}
+            {tab === 'upgrade' && <UpgradePanel project={project} />}
           </section>
         </main>
 
