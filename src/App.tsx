@@ -25,8 +25,8 @@ export default function App() {
   useEffect(() => {
     let active = true
     health(project)
-      .then((res) => {
-        if (active) setConnection(res.status === 'ok' ? 'ok' : 'error')
+      .then((ok) => {
+        if (active) setConnection(ok ? 'ok' : 'error')
       })
       .catch(() => {
         if (active) setConnection('error')

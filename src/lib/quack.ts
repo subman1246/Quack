@@ -1,9 +1,9 @@
 /* ---------------------------------------------------------------------------
-   Quack mock data layer.
+   Quack data layer.
 
-   These functions stand in for the real Quack bridge. They return realistic
-   shaped data after a short delay so the UI can be built end to end with no
-   backend. Each function is marked with a TODO to swap in the real transport.
+   recall, remember, and health talk to the live Parcle bridge over HTTP.
+   listMemories stays local: it is backed by the seed cards plus whatever the
+   Remember tab has written to localStorage through the shared episode store.
 --------------------------------------------------------------------------- */
 
 export type EpisodeType = 'decision' | 'bug' | 'dependency'
@@ -34,7 +34,16 @@ export interface HealthResult {
   checkedAt: string
 }
 
-/** Simulated network latency for the mock layer. */
+/**
+ * Base URL for the Parcle bridge. Set VITE_BRIDGE_URL at build time to point at
+ * a different deployment.
+ */
+const BASE: string =
+  import.meta.env.VITE_BRIDGE_URL ?? 'https://subman1246-quack-bridge.hf.space'
+
+/* --------------------- Local seed data for listMemories ----------------- */
+
+/** Simulated network latency for the local listMemories path. */
 const MOCK_DELAY = 600
 
 function delay<T>(value: T, ms = MOCK_DELAY): Promise<T> {
@@ -46,8 +55,6 @@ function isoDaysAgo(days: number): string {
   d.setDate(d.getDate() - days)
   return d.toISOString()
 }
-
-/* ----------------------------- Seed memories ---------------------------- */
 
 const SEED_EPISODES: Episode[] = [
   {
@@ -97,76 +104,73 @@ const SEED_EPISODES: Episode[] = [
   },
 ]
 
+const localEpisodes: Episode[] = []
+
 /* -------------------------------- Recall -------------------------------- */
 
-function pickCitations(query: string): Citation[] {
-  // Choose 1 to 3 seed episodes that loosely relate to the query.
-  const q = query.toLowerCase()
-  const scored = SEED_EPISODES.map((ep, i) => {
-    const hay = (ep.title + ' ' + ep.details).toLowerCase()
-    const words = q.split(/\s+/).filter(Boolean)
-    const score = words.reduce((acc, w) => acc + (hay.includes(w) ? 1 : 0), 0)
-    return { ep, i, score }
-  })
-  scored.sort((a, b) => b.score - a.score || a.i - b.i)
-  const count = Math.min(3, Math.max(1, scored[0].score > 0 ? 2 : 1))
-  return scored.slice(0, count).map(({ ep, i }) => ({
-    type: ep.type,
-    id: `ep_${String(i + 1).padStart(4, '0')}`,
-  }))
-}
-
-/**
- * Ask Quack a question about the project.
- * TODO: replace with the real Quack bridge call.
- */
+/** Ask Quack a question about the project through the bridge. */
 export async function recall(
   project: string,
   query: string,
 ): Promise<RecallResult> {
-  const citations = pickCitations(query)
-  const answer =
-    `Based on what ${project} remembers, ` +
-    `the relevant history points to ${citations.length} episode` +
-    `${citations.length === 1 ? '' : 's'}. ` +
-    `The most recent decision was to keep the timeline feed stable under ` +
-    `concurrent writes, and a related bug around stale recall responses was ` +
-    `resolved by keying the cache on project and query. Review the cited ` +
-    `episodes for the exact files and rationale.`
-
-  const confidence = Math.min(
-    0.97,
-    0.55 + citations.length * 0.12 + (query.trim().length > 12 ? 0.08 : 0),
-  )
-
-  return delay({ answer, confidence, citations })
+  try {
+    const res = await fetch(`${BASE}/recall`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project, query }),
+    })
+    if (!res.ok) {
+      throw new Error(`Recall request failed with status ${res.status}`)
+    }
+    const { answer, confidence, citations } = await res.json()
+    return { answer, confidence, citations: citations ?? [] }
+  } catch (err) {
+    // Re-throw so the caller's existing toast handling can surface it.
+    throw err instanceof Error ? err : new Error('Recall request failed')
+  }
 }
 
 /* ------------------------------- Remember ------------------------------- */
 
-const localEpisodes: Episode[] = []
-
 /**
- * Persist a new episode into the project memory.
- * TODO: replace with the real Quack bridge call.
+ * Persist a new episode through the bridge. The caller still writes the returned
+ * episode into the local store, so the Memory tab updates on success.
  */
 export async function remember(
-  _project: string,
+  project: string,
   episode: Episode,
 ): Promise<Episode> {
-  const saved: Episode = {
-    ...episode,
-    createdAt: episode.createdAt || new Date().toISOString(),
+  try {
+    const res = await fetch(`${BASE}/remember`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        project,
+        type: episode.type,
+        title: episode.title,
+        details: episode.details,
+        files: episode.files,
+        packages: episode.packages,
+      }),
+    })
+    if (!res.ok) {
+      throw new Error(`Remember request failed with status ${res.status}`)
+    }
+    const saved = (await res.json()) as Partial<Episode>
+    // Prefer the bridge's view of the episode, falling back to the submitted
+    // fields so the returned value is always a complete Episode.
+    return { ...episode, ...saved }
+  } catch (err) {
+    // Re-throw so the caller's existing error state can surface it.
+    throw err instanceof Error ? err : new Error('Remember request failed')
   }
-  localEpisodes.unshift(saved)
-  return delay(saved)
 }
 
 /* ------------------------------ List memory ----------------------------- */
 
 /**
- * List all remembered episodes for a project, newest first.
- * TODO: replace with the real Quack bridge call.
+ * List all remembered episodes for a project, newest first. Stays local and
+ * does not call the bridge.
  */
 export async function listMemories(_project: string): Promise<Episode[]> {
   const all = [...localEpisodes, ...SEED_EPISODES]
@@ -180,13 +184,14 @@ export async function listMemories(_project: string): Promise<Episode[]> {
 /* -------------------------------- Health -------------------------------- */
 
 /**
- * Check the Quack connection for a project.
- * TODO: replace with the real Quack bridge call.
+ * Check the bridge health endpoint. Returns true when the response is ok and
+ * false on any failure. Never throws.
  */
-export async function health(project = 'quack-demo'): Promise<HealthResult> {
-  return delay({
-    status: 'ok',
-    project,
-    checkedAt: new Date().toISOString(),
-  })
+export async function health(_project = 'quack-demo'): Promise<boolean> {
+  try {
+    const res = await fetch(`${BASE}/health`)
+    return res.ok
+  } catch {
+    return false
+  }
 }
