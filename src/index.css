@@ -39,6 +39,13 @@
 
 :root {
   color-scheme: dark;
+  /* Accent opacity variants. JS overrides these when the accent color changes
+     so glow effects, focus rings, and the background gradient stay in sync. */
+  --accent-a40: rgba(245, 182, 66, 0.4);
+  --accent-a45: rgba(245, 182, 66, 0.45);
+  --accent-a70: rgba(245, 182, 66, 0.7);
+  --accent-a08: rgba(245, 182, 66, 0.08);
+  --accent-a03: rgba(245, 182, 66, 0.03);
 }
 
 html,
@@ -80,8 +87,8 @@ body {
   pointer-events: none;
   background: radial-gradient(
     ellipse at center,
-    rgba(245, 182, 66, 0.08) 0%,
-    rgba(245, 182, 66, 0.03) 35%,
+    var(--accent-a08) 0%,
+    var(--accent-a03) 35%,
     transparent 70%
   );
   filter: blur(8px);
@@ -104,8 +111,8 @@ body {
 /* Soft amber glow used on primary buttons and focused inputs. */
 .quack-amber-glow {
   box-shadow:
-    0 0 0 1px rgba(245, 182, 66, 0.4),
-    0 8px 28px -8px rgba(245, 182, 66, 0.45);
+    0 0 0 1px var(--accent-a40),
+    0 8px 28px -8px var(--accent-a45);
 }
 
 /* Amber focus ring for keyboard accessibility. */
@@ -113,7 +120,7 @@ body {
   outline: none;
   box-shadow:
     0 0 0 2px var(--color-base),
-    0 0 0 4px rgba(245, 182, 66, 0.7);
+    0 0 0 4px var(--accent-a70);
   transition: box-shadow 0.18s var(--ease-out-soft);
 }
 
@@ -225,4 +232,40 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* ------------------------------- Density ------------------------------- */
+
+/* Compact mode reduces panel padding without touching individual components. */
+.quack-compact [role='tabpanel'] > div,
+.quack-compact [role='tabpanel'] > form {
+  padding: 0.875rem !important;
+}
+
+/* ----------------------------- Reduced motion -------------------------- */
+
+/* In-app toggle. Mirrors the system prefers-reduced-motion behaviour. */
+.quack-no-motion *,
+.quack-no-motion *::before,
+.quack-no-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* ---------------------------- Settings panel --------------------------- */
+
+@keyframes quack-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.quack-slide-in-right {
+  animation: quack-slide-in-right 0.3s var(--ease-out-soft) both;
 }

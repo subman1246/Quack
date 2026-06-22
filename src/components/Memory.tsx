@@ -8,11 +8,13 @@ import {
   updateEpisode,
   deleteEpisode,
 } from '../lib/episode-store'
+import { FileHistoryPanel } from './FileHistoryPanel'
 
 /* ---------------------------------------------------------------------------
    Memory tab. A searchable, filterable feed of episode cards. On first load
    the seed episodes are written to localStorage so edits and deletes persist
    across reloads. Clicking a card opens a detail view with an Edit mode.
+   File chips are interactive: clicking one opens the File History slide-over.
 --------------------------------------------------------------------------- */
 
 function daysAgo(days: number): string {
@@ -86,6 +88,7 @@ function relativeTime(iso: string): string {
   return `${Math.round(mo / 12)}y ago`
 }
 
+/** Plain non-interactive chip, used for package names. */
 function Chip({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded-md border border-hairline bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink-muted">
@@ -94,16 +97,44 @@ function Chip({ children }: { children: React.ReactNode }) {
   )
 }
 
+/**
+ * Interactive file chip. Clicking opens the File History slide-over.
+ * stopPropagation prevents the parent card from receiving the click.
+ */
+function FileChip({
+  path,
+  onFileClick,
+}: {
+  path: string
+  onFileClick: (path: string) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        onFileClick(path)
+      }}
+      aria-label={`View file history for ${path}`}
+      className="quack-press quack-focusable rounded-md border border-hairline bg-surface px-1.5 py-0.5 font-mono text-[11px] text-ink-muted hover:border-amber/40 hover:text-ink-soft"
+    >
+      {path}
+    </button>
+  )
+}
+
 /* -------------------------- Episode detail modal ------------------------- */
 
-function EpisodeDetailModal({
+export function EpisodeDetailModal({
   episode,
   project,
   onClose,
+  onFileClick,
 }: {
   episode: Episode
   project: string
   onClose: () => void
+  onFileClick?: (path: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState<Episode>(episode)
@@ -212,9 +243,13 @@ function EpisodeDetailModal({
             )}
             {(episode.files.length > 0 || episode.packages.length > 0) && (
               <div className="mt-3 flex flex-wrap gap-1.5">
-                {episode.files.map((f) => (
-                  <Chip key={`f-${f}`}>{f}</Chip>
-                ))}
+                {episode.files.map((f) =>
+                  onFileClick ? (
+                    <FileChip key={`f-${f}`} path={f} onFileClick={onFileClick} />
+                  ) : (
+                    <Chip key={`f-${f}`}>{f}</Chip>
+                  ),
+                )}
                 {episode.packages.map((p) => (
                   <Chip key={`p-${p}`}>{p}</Chip>
                 ))}
@@ -342,17 +377,29 @@ function EpisodeDetailModal({
 function EpisodeCard({
   episode,
   onClick,
+  onFileClick,
 }: {
   episode: Episode
   onClick: () => void
+  onFileClick: (path: string) => void
 }) {
   const meta = EPISODE_META[episode.type]
   const Icon = meta.icon
+
+  // Using div+role="button" instead of <button> so that the interactive
+  // FileChip buttons inside are valid HTML (no nested buttons).
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className="quack-rise quack-press quack-focusable w-full rounded-xl border bg-surface p-4 text-left"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
+      className="quack-rise quack-press quack-focusable w-full cursor-pointer rounded-xl border bg-surface p-4 text-left"
       style={{ borderColor: meta.tintBorder }}
     >
       <div className="flex items-start gap-3">
@@ -388,7 +435,7 @@ function EpisodeCard({
           {(episode.files.length > 0 || episode.packages.length > 0) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {episode.files.map((f) => (
-                <Chip key={`f-${f}`}>{f}</Chip>
+                <FileChip key={`f-${f}`} path={f} onFileClick={onFileClick} />
               ))}
               {episode.packages.map((p) => (
                 <Chip key={`p-${p}`}>{p}</Chip>
@@ -397,7 +444,7 @@ function EpisodeCard({
           )}
         </div>
       </div>
-    </button>
+    </div>
   )
 }
 
@@ -415,6 +462,7 @@ export function MemoryPanel({ project }: { project: string }) {
   const [filter, setFilter] = useState<FilterId>('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Episode | null>(null)
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
 
   // On first load per project, write seed episodes into localStorage so they
   // are persistent and editable like any other episode.
@@ -442,6 +490,12 @@ export function MemoryPanel({ project }: { project: string }) {
       return hay.includes(q)
     })
   }, [all, filter, search])
+
+  // Open file history, closing any open episode modal first.
+  const openFile = useCallback((path: string) => {
+    setSelected(null)
+    setSelectedFile(path)
+  }, [])
 
   return (
     <div className="p-5 sm:p-6">
@@ -503,6 +557,7 @@ export function MemoryPanel({ project }: { project: string }) {
                 key={`${ep.createdAt}-${ep.title}-${i}`}
                 episode={ep}
                 onClick={() => setSelected(ep)}
+                onFileClick={openFile}
               />
             ))}
           </div>
@@ -514,6 +569,19 @@ export function MemoryPanel({ project }: { project: string }) {
           episode={selected}
           project={project}
           onClose={() => setSelected(null)}
+          onFileClick={openFile}
+        />
+      )}
+
+      {selectedFile !== null && (
+        <FileHistoryPanel
+          path={selectedFile}
+          project={project}
+          onClose={() => setSelectedFile(null)}
+          onEpisodeClick={(ep) => {
+            setSelectedFile(null)
+            setSelected(ep)
+          }}
         />
       )}
     </div>

@@ -1,9 +1,11 @@
+import { Settings } from 'lucide-react'
 import { DuckMark } from './DuckMark'
 
 export type ConnectionState = 'neutral' | 'ok' | 'error'
 
 interface HeaderProps {
   connection: ConnectionState
+  onSettingsClick: () => void
 }
 
 const DOT: Record<
@@ -27,8 +29,8 @@ const DOT: Record<
   },
 }
 
-/** Top header: duck mark, wordmark, tagline, and connection indicator. */
-export function Header({ connection }: HeaderProps) {
+/** Top header: duck mark, wordmark, tagline, connection indicator, and settings. */
+export function Header({ connection, onSettingsClick }: HeaderProps) {
   const dot = DOT[connection]
   return (
     <header className="flex items-center justify-between gap-4">
@@ -51,24 +53,35 @@ export function Header({ connection }: HeaderProps) {
         </div>
       </div>
 
-      <div
-        className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-3 py-1.5"
-        title={dot.title}
-      >
-        <span
-          aria-hidden="true"
-          className={`h-2 w-2 rounded-full ${
-            connection === 'neutral' ? 'quack-dot' : ''
-          }`}
-          style={{
-            backgroundColor: dot.color,
-            boxShadow:
-              connection === 'neutral' ? 'none' : `0 0 8px ${dot.color}`,
-          }}
-        />
-        <span className="font-mono text-[11px] text-ink-muted">
-          {dot.label}
-        </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onSettingsClick}
+          aria-label="Open settings"
+          className="quack-press quack-focusable flex h-8 w-8 items-center justify-center rounded-lg border border-hairline bg-surface text-ink-muted hover:text-ink"
+        >
+          <Settings size={15} aria-hidden="true" />
+        </button>
+
+        <div
+          className="flex items-center gap-2 rounded-full border border-hairline bg-surface px-3 py-1.5"
+          title={dot.title}
+        >
+          <span
+            aria-hidden="true"
+            className={`h-2 w-2 rounded-full ${
+              connection === 'neutral' ? 'quack-dot' : ''
+            }`}
+            style={{
+              backgroundColor: dot.color,
+              boxShadow:
+                connection === 'neutral' ? 'none' : `0 0 8px ${dot.color}`,
+            }}
+          />
+          <span className="font-mono text-[11px] text-ink-muted">
+            {dot.label}
+          </span>
+        </div>
       </div>
     </header>
   )

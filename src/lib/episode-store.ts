@@ -93,6 +93,15 @@ export function deleteEpisode(project: string, createdAt: string) {
 }
 
 /**
+ * Delete all stored episodes for a project and notify subscribers.
+ * Used by the Settings Data section to clear the local memory cache.
+ */
+export function clearEpisodes(project: string) {
+  localStorage.removeItem(key(project))
+  emit()
+}
+
+/**
  * Subscribe to a project's stored episodes, newest first. Reloads whenever the
  * project changes or another part of the app adds an episode.
  */

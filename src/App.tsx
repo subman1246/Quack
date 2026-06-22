@@ -1,27 +1,52 @@
-import { useEffect, useState } from 'react'
-import { Header, type ConnectionState } from './components/Header'
+import { useCallback, useEffect, useState } from 'react'
+import { Header } from './components/Header'
+import type { ConnectionState } from './components/Header'
 import { Splash } from './components/Splash'
-import { Tabs, type TabId } from './components/Tabs'
+import { Tabs } from './components/Tabs'
+import type { TabId } from './components/Tabs'
 import { RecallPanel } from './components/Recall'
 import { RememberPanel } from './components/Remember'
 import { MemoryPanel } from './components/Memory'
+import { SettingsPanel } from './components/Settings'
 import { health } from './lib/quack'
+import {
+  type QuackSettings,
+  applyAccentColor,
+  loadSettings,
+  pushRecentProject,
+  saveSettings,
+} from './lib/settings-store'
+
+/* ---------------------------------------------------------------------------
+   Apply the stored accent color before the first React paint so there is no
+   flash of the default amber when a custom color has been saved.
+--------------------------------------------------------------------------- */
+const _initialSettings = loadSettings()
+applyAccentColor(_initialSettings.accentColor)
 
 export default function App() {
-  const [booted, setBooted] = useState(false)
+  const [settings, setSettings] = useState<QuackSettings>(_initialSettings)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Skip splash if the user has turned it off in settings.
+  const [booted, setBooted] = useState(!_initialSettings.splashOnLaunch)
   const [project, setProject] = useState('quack-demo')
   const [tab, setTab] = useState<TabId>('recall')
   const [connection, setConnection] = useState<ConnectionState>('neutral')
 
-  // Reset to checking when the project changes, adjusting state during render
-  // (React's endorsed pattern) rather than inside the effect.
+  // Seed the initial project into recent history once.
+  useEffect(() => {
+    pushRecentProject(project)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Reset connection state when project changes (state-during-render pattern).
   const [prevProject, setPrevProject] = useState(project)
   if (prevProject !== project) {
     setPrevProject(project)
     setConnection('neutral')
   }
 
-  // Check the Quack connection on load and whenever the project changes.
+  // Check the Quack bridge on load and whenever the project changes.
   useEffect(() => {
     let active = true
     health(project)
@@ -44,8 +69,32 @@ export default function App() {
     }
   }, [booted])
 
+  /** Apply a settings patch, persist, and update accent color if needed. */
+  const updateSettings = useCallback((patch: Partial<QuackSettings>) => {
+    setSettings((prev) => {
+      const next = { ...prev, ...patch }
+      saveSettings(next)
+      if (patch.accentColor) applyAccentColor(patch.accentColor)
+      return next
+    })
+  }, [])
+
+  /** Change the active project from the settings panel or the main input. */
+  function changeProject(name: string) {
+    setProject(name)
+    if (name.trim()) pushRecentProject(name.trim())
+  }
+
+  const rootClass = [
+    'quack-noise quack-glow relative min-h-full',
+    settings.density === 'compact' ? 'quack-compact' : '',
+    settings.reduceMotion ? 'quack-no-motion' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
-    <div className="quack-noise quack-glow relative min-h-full">
+    <div className={rootClass}>
       {!booted && <Splash onDone={() => setBooted(true)} />}
 
       <div
@@ -53,7 +102,10 @@ export default function App() {
           booted ? 'opacity-100' : 'opacity-0'
         }`}
       >
-        <Header connection={connection} />
+        <Header
+          connection={connection}
+          onSettingsClick={() => setSettingsOpen(true)}
+        />
 
         {/* Project selector */}
         <div className="quack-rise mt-7">
@@ -68,6 +120,10 @@ export default function App() {
             type="text"
             value={project}
             onChange={(e) => setProject(e.target.value)}
+            onBlur={(e) => {
+              const name = e.target.value.trim()
+              if (name) pushRecentProject(name)
+            }}
             spellCheck={false}
             autoComplete="off"
             placeholder="quack-demo"
@@ -98,6 +154,16 @@ export default function App() {
           Powered by Parcle
         </footer>
       </div>
+
+      {settingsOpen && (
+        <SettingsPanel
+          settings={settings}
+          onSettingsChange={updateSettings}
+          project={project}
+          onProjectChange={changeProject}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </div>
   )
 }

@@ -6,6 +6,8 @@
    Remember tab has written to localStorage through the shared episode store.
 --------------------------------------------------------------------------- */
 
+import { getBridgeBase } from './bridge-url'
+
 export type EpisodeType = 'decision' | 'bug' | 'dependency'
 
 export interface Episode {
@@ -36,11 +38,10 @@ export interface HealthResult {
 }
 
 /**
- * Base URL for the Parcle bridge. Set VITE_BRIDGE_URL at build time to point at
- * a different deployment.
+ * Base URL for the Parcle bridge. Resolved per-call so a localStorage override
+ * saved in Settings takes effect on the next request without a page reload.
+ * Resolution order: localStorage override > VITE_BRIDGE_URL > hardcoded default.
  */
-const BASE: string =
-  import.meta.env.VITE_BRIDGE_URL ?? 'https://subman1246-quack-bridge.hf.space'
 
 /* --------------------- Local seed data for listMemories ----------------- */
 
@@ -115,7 +116,7 @@ export async function recall(
   query: string,
 ): Promise<RecallResult> {
   try {
-    const res = await fetch(`${BASE}/recall`, {
+    const res = await fetch(`${getBridgeBase()}/recall`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ project, query }),
@@ -142,7 +143,7 @@ export async function remember(
   episode: Episode,
 ): Promise<Episode> {
   try {
-    const res = await fetch(`${BASE}/remember`, {
+    const res = await fetch(`${getBridgeBase()}/remember`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -190,7 +191,7 @@ export async function listMemories(_project: string): Promise<Episode[]> {
  */
 export async function health(_project = 'quack-demo'): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/health`)
+    const res = await fetch(`${getBridgeBase()}/health`)
     return res.ok
   } catch {
     return false

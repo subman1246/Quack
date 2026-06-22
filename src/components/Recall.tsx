@@ -1,22 +1,23 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
   Copy,
-  FileText,
-  HelpCircle,
   Keyboard,
-  MessageSquare,
   Search,
   Sparkles,
   X,
-  type LucideIcon,
 } from 'lucide-react'
-import { recall, type Citation, type RecallResult } from '../lib/quack'
+import { recall, type Episode, type RecallResult } from '../lib/quack'
+import { ConfidenceGauge, CitationCard, gradeOf } from './RecallShared'
+import { FileHistoryPanel } from './FileHistoryPanel'
+import { EpisodeDetailModal } from './Memory'
 
 /* ---------------------------------------------------------------------------
    Recall tab. Ask Quack a question, watch the confidence gauge fill, and copy
    the cited episode ids. Recent queries persist per project in localStorage.
+   File-type citation chips open the File History slide-over instead of
+   copying, so every file reference is one click away from its full history.
 --------------------------------------------------------------------------- */
 
 const SUGGESTIONS = [
@@ -101,220 +102,6 @@ function ToastStack({
   )
 }
 
-/* --------------------------- Confidence gauge -------------------------- */
-
-function gradeOf(pct: number): { color: string; label: string } {
-  if (pct >= 70) return { color: '#46c98b', label: 'High confidence' }
-  if (pct >= 40) return { color: 'var(--color-amber)', label: 'Medium confidence' }
-  return { color: 'var(--color-bug)', label: 'Low confidence' }
-}
-
-const GAUGE_R = 54
-const GAUGE_C = 2 * Math.PI * GAUGE_R
-const GAUGE_ARC = 0.75 // 270 degrees, gap at the bottom
-const GAUGE_TRACK = GAUGE_C * GAUGE_ARC
-
-function ConfidenceGauge({ value }: { value: number }) {
-  const pct = Math.round(value * 100)
-  const { color, label } = gradeOf(pct)
-  const fillRef = useRef<SVGCircleElement>(null)
-
-  // Animate by starting empty, then transitioning the dashoffset to target.
-  // useLayoutEffect sets the starting offset before paint to avoid a flash,
-  // then rAF flips it so the CSS transition runs.
-  useLayoutEffect(() => {
-    const el = fillRef.current
-    if (!el) return
-    el.style.strokeDashoffset = String(GAUGE_TRACK)
-    const target = GAUGE_TRACK - GAUGE_TRACK * (pct / 100)
-    const id = window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(() => {
-        el.style.strokeDashoffset = String(target)
-      }),
-    )
-    return () => window.cancelAnimationFrame(id)
-  }, [pct])
-
-  return (
-    <div
-      className="flex flex-col items-center"
-      role="img"
-      aria-label={`${pct} percent, ${label}`}
-    >
-      <div className="relative h-[140px] w-[140px]">
-        <svg viewBox="0 0 140 140" className="h-full w-full">
-          {/* Track */}
-          <circle
-            cx="70"
-            cy="70"
-            r={GAUGE_R}
-            fill="none"
-            stroke="rgba(255,255,255,0.07)"
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={`${GAUGE_TRACK} ${GAUGE_C}`}
-            transform="rotate(135 70 70)"
-          />
-          {/* Fill */}
-          <circle
-            ref={fillRef}
-            cx="70"
-            cy="70"
-            r={GAUGE_R}
-            fill="none"
-            stroke={color}
-            strokeWidth="10"
-            strokeLinecap="round"
-            strokeDasharray={`${GAUGE_TRACK} ${GAUGE_C}`}
-            strokeDashoffset={GAUGE_TRACK}
-            transform="rotate(135 70 70)"
-            style={{
-              transition:
-                'stroke-dashoffset 1s var(--ease-out-soft), stroke 0.4s ease',
-              filter: `drop-shadow(0 0 6px ${color})`,
-            }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span
-            className="font-mono text-3xl font-semibold tabular-nums"
-            style={{ color }}
-          >
-            {pct}
-            <span className="text-lg">%</span>
-          </span>
-        </div>
-      </div>
-      <span className="mt-1 text-xs font-medium text-ink-soft">{label}</span>
-    </div>
-  )
-}
-
-/* ------------------------------ Citations ------------------------------ */
-
-interface SourceMeta {
-  label: string
-  icon: LucideIcon
-  color: string
-  tintBg: string
-  tintBorder: string
-}
-
-const NEUTRAL_SOURCE: SourceMeta = {
-  label: 'Source',
-  icon: HelpCircle,
-  color: 'var(--color-ink-soft)',
-  tintBg: 'rgba(255,255,255,0.06)',
-  tintBorder: 'rgba(255,255,255,0.12)',
-}
-
-const SOURCE_META: Record<string, SourceMeta> = {
-  session: {
-    label: 'Session',
-    icon: MessageSquare,
-    color: 'var(--color-ink-soft)',
-    tintBg: 'rgba(255,255,255,0.06)',
-    tintBorder: 'rgba(255,255,255,0.12)',
-  },
-  file: {
-    label: 'File',
-    icon: FileText,
-    color: 'var(--color-ink-soft)',
-    tintBg: 'rgba(255,255,255,0.06)',
-    tintBorder: 'rgba(255,255,255,0.12)',
-  },
-}
-
-function getSourceMeta(type: string | undefined): SourceMeta {
-  if (!type) return NEUTRAL_SOURCE
-  const known = SOURCE_META[type]
-  if (known) return known
-  // Unknown type: show type name capitalized, neutral styling
-  return {
-    ...NEUTRAL_SOURCE,
-    label: type.charAt(0).toUpperCase() + type.slice(1),
-  }
-}
-
-function CitationCard({
-  citation,
-  onCopy,
-}: {
-  citation: Citation
-  onCopy: (id: string) => void
-}) {
-  const meta = getSourceMeta(citation.type)
-  const Icon = meta.icon
-  return (
-    <button
-      type="button"
-      onClick={() => onCopy(citation.id)}
-      title={`Copy ${citation.id}`}
-      className="quack-press quack-focusable group flex items-center gap-2.5 rounded-xl border bg-surface px-3 py-2.5 text-left"
-      style={{ borderColor: meta.tintBorder }}
-    >
-      <span
-        className="flex h-7 w-7 flex-none items-center justify-center rounded-lg"
-        style={{ backgroundColor: meta.tintBg, color: meta.color }}
-      >
-        <Icon size={15} aria-hidden="true" />
-      </span>
-      <span className="min-w-0 leading-tight">
-        <span
-          className="block text-[11px] font-medium uppercase tracking-wider"
-          style={{ color: meta.color }}
-        >
-          {meta.label}
-        </span>
-        <span className="block truncate font-mono text-xs text-ink-soft">
-          {citation.id}
-        </span>
-      </span>
-      <Copy
-        size={13}
-        aria-hidden="true"
-        className="ml-auto flex-none text-ink-muted opacity-0 transition-opacity group-hover:opacity-100"
-      />
-    </button>
-  )
-}
-
-/* ------------------------------- Recent -------------------------------- */
-
-interface RecentEntry {
-  query: string
-  confidence: number
-  at: number
-}
-
-const RECENT_LIMIT = 6
-
-function recentKey(project: string) {
-  return `quack:recent:${project || 'default'}`
-}
-
-function loadRecent(project: string): RecentEntry[] {
-  try {
-    const raw = localStorage.getItem(recentKey(project))
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (e) => e && typeof e.query === 'string' && typeof e.confidence === 'number',
-    )
-  } catch {
-    return []
-  }
-}
-
-function saveRecent(project: string, entries: RecentEntry[]) {
-  try {
-    localStorage.setItem(recentKey(project), JSON.stringify(entries))
-  } catch {
-    // Storage unavailable. Recent history is best effort only.
-  }
-}
-
 /* --------------------------- Shortcuts overlay ------------------------- */
 
 function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
@@ -384,6 +171,42 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
   )
 }
 
+/* ------------------------------- Recent -------------------------------- */
+
+interface RecentEntry {
+  query: string
+  confidence: number
+  at: number
+}
+
+const RECENT_LIMIT = 6
+
+function recentKey(project: string) {
+  return `quack:recent:${project || 'default'}`
+}
+
+function loadRecent(project: string): RecentEntry[] {
+  try {
+    const raw = localStorage.getItem(recentKey(project))
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (e) => e && typeof e.query === 'string' && typeof e.confidence === 'number',
+    )
+  } catch {
+    return []
+  }
+}
+
+function saveRecent(project: string, entries: RecentEntry[]) {
+  try {
+    localStorage.setItem(recentKey(project), JSON.stringify(entries))
+  } catch {
+    // Storage unavailable. Recent history is best effort only.
+  }
+}
+
 /* ----------------------------- Recall panel ---------------------------- */
 
 export function RecallPanel({ project }: { project: string }) {
@@ -394,6 +217,11 @@ export function RecallPanel({ project }: { project: string }) {
   const [recentOpen, setRecentOpen] = useState(true)
   const [showHelp, setShowHelp] = useState(false)
   const [answerCopied, setAnswerCopied] = useState(false)
+
+  // File History panel state -- null means closed.
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  // Episode detail state for episodes opened from the file history panel.
+  const [selectedEpisode, setSelectedEpisode] = useState<Episode | null>(null)
 
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const { toasts, push, dismiss } = useToasts()
@@ -623,7 +451,7 @@ export function RecallPanel({ project }: { project: string }) {
             </div>
           </div>
 
-          {/* Citations */}
+          {/* Citations -- file-type chips open File History instead of copying */}
           {result.citations.length > 0 && (
             <div className="quack-rise mt-6" style={{ animationDelay: '0.12s' }}>
               <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-ink-muted">
@@ -634,8 +462,11 @@ export function RecallPanel({ project }: { project: string }) {
                   <CitationCard
                     key={c.id}
                     citation={c}
-                    onCopy={(id) =>
-                      copyText(id, `Copied ${id}`)
+                    onCopy={(id) => copyText(id, `Copied ${id}`)}
+                    onOpen={
+                      c.type === 'file'
+                        ? () => setSelectedFile(c.id)
+                        : undefined
                     }
                   />
                 ))}
@@ -696,6 +527,32 @@ export function RecallPanel({ project }: { project: string }) {
 
       {showHelp && <ShortcutsOverlay onClose={() => setShowHelp(false)} />}
       <ToastStack toasts={toasts} onDismiss={dismiss} />
+
+      {/* File History slide-over */}
+      {selectedFile !== null && (
+        <FileHistoryPanel
+          path={selectedFile}
+          project={project}
+          onClose={() => setSelectedFile(null)}
+          onEpisodeClick={(ep) => {
+            setSelectedFile(null)
+            setSelectedEpisode(ep)
+          }}
+        />
+      )}
+
+      {/* Episode detail opened from File History */}
+      {selectedEpisode !== null && (
+        <EpisodeDetailModal
+          episode={selectedEpisode}
+          project={project}
+          onClose={() => setSelectedEpisode(null)}
+          onFileClick={(path) => {
+            setSelectedEpisode(null)
+            setSelectedFile(path)
+          }}
+        />
+      )}
     </div>
   )
 }
